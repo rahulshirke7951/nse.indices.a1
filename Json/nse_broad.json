@@ -2,8 +2,23 @@
   "start_date": "2025-09-01",
   "end_date": "2025-11-30",
   "indices": {
-    "Nifty 50": "^NSEI",
-    "Nifty Bank": "^NSEBANK"
-    // ...rest of your indices
-  }
+        "Nifty 50": "^NSEI",
+        "Nifty Next 50": "^NSMIDCP",
+        "Nifty 100": "^CNX100",
+        "Nifty 200": "^CNX200",
+        "Nifty Microcap 250": "NIFTY_MICROCAP250.NS",
+        "Nifty Smallcap 50": "NIFTYSMLCAP50.NS",
+        "Nifty Midcap 50": "^NSEMDCP50",
+        "Nifty Smallcap 100": "^CNXSC",
+        "Nifty Midcap 100": "^CRSMID",
+        "Nifty Midcap 150": "NIFTYMIDCAP150.NS",
+        "Nifty MidSmallcap 400": "NIFTYMIDSML400.NS",
+        "Nifty Smallcap 250": "NIFTYSMLCAP250.NS",
+        "Nifty Midcap Select": "NIFTY_MID_SELECT.NS",
+        "Nifty500 LargeMidSmall Equal-Cap Weighted": "^CRSLDX",
+        "Nifty500 Multicap 50:25:25": "MULTICAP.NS",
+        "Nifty LargeMidcap 250": "NIFTY_LARGEMID250.NS",
+        "Nifty Total Market": "NIFTY_TOTAL_MKT.NS",
+        "Nifty 500": "^CRSLDX"
+      }
 }
