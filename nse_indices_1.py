@@ -19,7 +19,8 @@ import pandas as pd
 import yfinance as yf
 
 from openpyxl import load_workbook
-from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.styles import Font, Alignment, PatternFill
+from openpyxl.utils import get_column_letter
 from openpyxl.formatting.rule import ColorScaleRule
 
 # === BASE PATHS ===
@@ -76,7 +77,7 @@ for name, symbol in INDICES.items():
             csvp = os.path.join(CACHE_DIR, f"{symbol.replace('^','caret_')}.csv")
             try:
                 df.to_csv(csvp)
-            except:
+            except Exception:
                 pass
 
             print(f"Fetched: {name} ({symbol}) rows={len(df)}")
@@ -92,7 +93,13 @@ if not data_dict:
 
 df_close = pd.DataFrame(data_dict)
 df_close.index = pd.to_datetime(df_close.index).tz_localize(None)
-df_close = df_close.sort_index(ascending=True).dropna(axis=1, how="all").ffill().bfill()
+df_close = (
+    df_close
+    .sort_index(ascending=True)
+    .dropna(axis=1, how="all")
+    .ffill()
+    .bfill()
+)
 
 df_pct_mtd = ((df_close / df_close.iloc[0]) - 1) * 100
 df_pct_mtd = df_pct_mtd.round(2)
@@ -101,7 +108,10 @@ df_pct_dod = df_close.pct_change() * 100
 df_pct_dod = df_pct_dod.round(2)
 
 mtd_series = df_pct_mtd.iloc[-1].copy()
-summary = pd.DataFrame({"MTD % Change": mtd_series}).sort_values(by="MTD % Change", ascending=False)
+summary = (
+    pd.DataFrame({"MTD % Change": mtd_series})
+    .sort_values(by="MTD % Change", ascending=False)
+)
 
 daily_summary = []
 for dt in df_pct_dod.sort_index(ascending=False).index:
@@ -164,7 +174,7 @@ market_overview = pd.DataFrame({
     ]
 })
 
-# === WRITE RAW WORKBOOK ===
+# === WRITE RAW WORKBOOK (same sheet names as before) ===
 
 with pd.ExcelWriter(RAW_XL, engine="openpyxl") as w:
     df_close.sort_index(ascending=False).to_excel(w, sheet_name="Index Close")
@@ -183,31 +193,71 @@ csv_path = os.path.join(DATA_DIR, "nse_indices_1_latest.csv")
 summary.to_csv(csv_path)
 print("✅ Latest summary CSV saved:", csv_path)
 
-# === FORMATTING WORKBOOK ===
+# === FORMATTING WORKBOOK (dashboard) ===
 
 if not os.path.exists(RAW_XL):
     raise FileNotFoundError(f"Raw workbook missing: {RAW_XL}")
 
 wb = load_workbook(RAW_XL)
-border = Border(bottom=Side(border_style="thin", color="000000"))
+
+# ---- COMMON STYLES ----
+HEADER_FONT = Font(bold=True)
+CENTER = Alignment(horizontal="center", vertical="center")
+CENTER_NO_WRAP = Alignment(horizontal="center", vertical="center")
+HEADER_FILL = PatternFill(start_color="DCE6F1", end_color="DCE6F1", fill_type="solid")
+NORMAL_FONT = Font(bold=False)
+DATE_FMT = "dd-mmm-yy"
+
+# ---- HELPERS ----
+def remove_all_borders(ws):
+    for row in ws.iter_rows():
+        for cell in row:
+            cell.border = None
 
 def set_header_style(ws):
     for c in ws[1]:
-        c.font = Font(bold=True)
-        c.alignment = Alignment(horizontal="center")
-        c.fill = PatternFill(start_color="DCE6F1", fill_type="solid")
-        c.border = border
+        c.font = HEADER_FONT
+        c.alignment = CENTER
+        c.fill = HEADER_FILL
+        c.border = None
 
 def set_col_widths(ws, widths):
-    from openpyxl.utils import get_column_letter
     if isinstance(widths, tuple):
         ws.column_dimensions[get_column_letter(1)].width = widths[0]
         for i in range(2, ws.max_column + 1):
             ws.column_dimensions[get_column_letter(i)].width = widths[1]
 
-for s in wb.sheetnames:
-    set_header_style(wb[s])
+def format_date_column(ws, col_idx=1, fmt=DATE_FMT, align=CENTER_NO_WRAP):
+    for r in range(2, ws.max_row + 1):
+        c = ws.cell(r, col_idx)
+        c.number_format = fmt
+        c.font = NORMAL_FONT
+        c.alignment = align
 
+def add_mtd_dod_heatmap(ws, min_row=2, min_col=2):
+    """
+    Red (bad) → Yellow (neutral) → Green (good) 3‑color scale
+    """
+    if ws.max_column < min_col or ws.max_row < min_row:
+        return
+
+    start_col_letter = get_column_letter(min_col)
+    end_col_letter = get_column_letter(ws.max_column)
+    rng = f"{start_col_letter}{min_row}:{end_col_letter}{ws.max_row}"
+
+    rule = ColorScaleRule(
+        start_type="num", start_value=-2, start_color="FFB71C1C",     # deep red
+        mid_type="num",  mid_value=0,  mid_color="FFFFF59D",         # yellow
+        end_type="num",  end_value=2,  end_color="FF1B5E20"          # deep green
+    )
+    ws.conditional_formatting.add(rng, rule)
+
+# ---- APPLY GLOBAL HEADER + NO BORDERS ----
+for ws in wb.worksheets:
+    remove_all_borders(ws)
+    set_header_style(ws)
+
+# ---- COLUMN WIDTHS (same as original intentions) ----
 set_col_widths(wb["Index Close"], (16, 14))
 set_col_widths(wb["MTD %"], (16, 12))
 set_col_widths(wb["Day over Day %"], (16, 12))
@@ -216,35 +266,70 @@ set_col_widths(wb["Daily Movers"], (16, 30))
 set_col_widths(wb["Streaks"], (20, 14))
 set_col_widths(wb["Market Overview"], (28, 28))
 
-try:
-    ws = wb["MTD %"]
-    lc, lr = ws.max_column, ws.max_row
-    rng = f"B2:{chr(65 + lc - 1)}{lr}"
-    rule = ColorScaleRule(
-        start_type="num", start_value=-2, start_color="F8696B",
-        mid_type="num", mid_value=0, mid_color="FFEB84",
-        end_type="num", end_value=2, end_color="63BE7B"
-    )
-    ws.conditional_formatting.add(rng, rule)
-except:
-    pass
+# ---- INDEX CLOSE: date + integer close ----
+ws = wb["Index Close"]
+format_date_column(ws, col_idx=1)
 
-try:
-    ws = wb["Streaks"]
-    for colcell in ws[1]:
-        if colcell.value in ("Longest Win Streak", "Longest Lose Streak"):
-            for cell in ws[colcell.column_letter]:
-                if cell.row > 1:
-                    cell.number_format = "0"
-except:
-    pass
+for col in range(2, ws.max_column + 1):
+    for r in range(2, ws.max_row + 1):
+        ws.cell(r, col).number_format = "0"
 
-try:
-    ws = wb["Market Overview"]
-    for cell in ws["A"]:
-        cell.font = Font(bold=True)
-except:
-    pass
+# ---- MTD %: date + heatmap ----
+ws = wb["MTD %"]
+format_date_column(ws, col_idx=1)
+add_mtd_dod_heatmap(ws, min_row=2, min_col=2)
+
+# ---- DoD%: rename + date + heatmap ----
+ws = wb["Day over Day %"]
+format_date_column(ws, col_idx=1)
+add_mtd_dod_heatmap(ws, min_row=2, min_col=2)
+ws.title = "DoD%"  # keep dashboard sheet naming you used earlier
+
+# ---- SUMMARY: header text & normal index font ----
+ws = wb["Summary"]
+ws["A1"].value = "Index"
+for cell in ws["A"][1:]:
+    cell.font = NORMAL_FONT
+
+# ---- DAILY MOVERS: proper date + wide text columns ----
+ws = wb["Daily Movers"]
+for r in range(2, ws.max_row + 1):
+    cell = ws.cell(r, 1)
+    val = cell.value
+    if isinstance(val, str):
+        dt = pd.to_datetime(val, errors="coerce", dayfirst=True)
+        if not pd.isna(dt):
+            cell.value = dt
+    cell.number_format = DATE_FMT
+    cell.font = NORMAL_FONT
+    cell.alignment = CENTER_NO_WRAP
+
+ws.column_dimensions["B"].width = 60
+ws.column_dimensions["C"].width = 60
+
+# ---- STREAKS: numeric columns as integer ----
+ws = wb["Streaks"]
+ws.column_dimensions["B"].width = 20
+ws.column_dimensions["C"].width = 20
+
+for header_cell in ws[1]:
+    if header_cell.value in ("Longest Win Streak", "Longest Lose Streak"):
+        col_letter = header_cell.column_letter
+        for cell in ws[col_letter][1:]:
+            cell.number_format = "0"
+
+# ---- MARKET OVERVIEW → Overview + bold left column ----
+ws = wb["Market Overview"]
+ws.title = "Overview"
+ws.column_dimensions["A"].width = 28
+ws.column_dimensions["B"].width = 36
+
+for cell in ws["A"]:
+    cell.font = HEADER_FONT
+
+# ---- SHEET ORDER (preserve names & new DoD%) ----
+desired = ["Overview", "Summary", "Index Close", "MTD %", "DoD%", "Daily Movers", "Streaks"]
+wb._sheets = [wb[s] for s in desired if s in wb.sheetnames]
 
 wb.save(OUT_XL)
 print("✅ Dashboard workbook saved:", OUT_XL)
