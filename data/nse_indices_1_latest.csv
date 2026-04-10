@@ -1,11 +1,11 @@
 ,MTD % Change
-Nifty 50,0.14
-Nifty Midcap 50,0.03
-Nifty 200,-0.47
-Nifty Midcap 150,-1.32
-Nifty 100,-2.17
-Nifty Midcap 100,-2.25
-Nifty500 Multicap 50:25:25,-3.08
-Nifty500 LargeMidSmall Equal-Cap Weighted,-3.43
-Nifty 500,-3.43
-Nifty Next 50,-4.1
+Nifty 50,1.3
+Nifty Midcap 50,1.3
+Nifty 200,0.88
+Nifty Midcap 150,0.25
+Nifty 100,-0.87
+Nifty500 Multicap 50:25:25,-1.64
+Nifty Midcap 100,-1.94
+Nifty500 LargeMidSmall Equal-Cap Weighted,-2.07
+Nifty 500,-2.07
+Nifty Next 50,-2.12
